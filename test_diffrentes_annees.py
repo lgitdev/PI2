@@ -1,58 +1,106 @@
 import cv2 as cv
 import numpy as np
 import matching as geo
+import os
+import re
 
 """
-Ce script calcul le taux de suppression des corespondances entre plusieurs couples de photos pris dans différentes missions 
-sur deux années.
+Ce script effectue un matching entre les images proches géographiquement dans la base de données, et vérifie que le matching est cohérent
+en utilisant des KPIs tels que la moyenne angulaire ou le parallélisme du matching
 """
 
+image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos\\2007"
+image_filenames = [f for f in os.listdir(image_folder) if f.endswith(('.png', '.tif'))]
 
-# Dictionary to store images with their corresponding filenames
-image_dict = {
-    "img2443": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2443.tif"),
-    "img2444": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2444.tif"),
-    "img2591": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2591.tif"),
-    "img2590": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2590.tif"),
-    "img2589": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2589.tif"),
-    "img4375": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4375.tif"),
-    "img4374": cv.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4374.tif"),
-}
+# Trier les images par ordre croissant -> on ne garde que les voisins les plus proches
+def extract_number(filename):
+    match = re.search(r'\d+', filename)
+    return int(match.group()) if match else float('inf')
 
-# Convert dictionary to two separate lists
-IMG = list(image_dict.values())  # Images
-IMG_NAMES = list(image_dict.keys())  # Corresponding names
+image_filenames.sort(key=extract_number)
 
-# Taille d'image pour visualisation du procédé
-for i in range(len(IMG)) :
-    scale_percent = 5  # 5%, peut être adapté
-    width = int(IMG[i].shape[1] * scale_percent / 100)
-    height = int(IMG[i].shape[0] * scale_percent / 100)
-    dim = (width, height)
-    IMG[i] = cv.resize(IMG[i], dim, interpolation=cv.INTER_AREA)
+image_dict = {filename: cv.imread(os.path.join(image_folder, filename)) for filename in image_filenames}
 
+IMG = list(image_dict.values())  # Liste des images chargées
+IMG_NAMES = list(image_dict.keys())  # Liste des noms d'images
 
-angles = np.zeros((len(IMG),len(IMG)))
+# Vérifier si toutes les images sont bien chargées
+for name, img in image_dict.items():
+    if img is None:
+        print(f"Erreur : L'image {name} n'a pas pu être chargée.")
 
-for i in range(len(IMG)) :
-    for j in range(i+1, len(IMG)) :
+if not IMG:
+    print("Aucune image trouvée dans le dossier spécifié.")
+    exit()
+
+# Fonction pour vérifier le parallélisme des lignes de matching
+def check_parallel_matches(kpt1, kpt2, matches, tolerance=5, min_parallel=5):
+    angles = []
+
+    for match in matches:
+        pt1 = np.array(kpt1[match.queryIdx].pt)  # Point dans la première image
+        pt2 = np.array(kpt2[match.trainIdx].pt)  # Point correspondant dans la deuxième image
+
+        # Calcul de l'angle de la ligne de matching
+        delta = pt2 - pt1
+        angle = np.arctan2(delta[1], delta[0]) * 180 / np.pi  # Conversion en degrés
+        angles.append(angle)
+
+    if len(angles) < min_parallel:
+        return False  # Pas assez de lignes pour vérifier
+
+    # Vérification du nombre de lignes quasi-parallèles
+    angles = np.array(angles)
+    for ref_angle in angles:
+        count_parallel = np.sum(np.abs(angles - ref_angle) < tolerance)  # Vérifie si l'écart est < tolérance
+        if count_parallel >= min_parallel:
+            return True  # Au moins 5 lignes parallèles trouvées
+
+    return False  # Pas assez de lignes parallèles
+
+# Initialisation de la matrice des angles
+angles = np.zeros((len(IMG), len(IMG)))
+
+# Seuil KPI (exemple : on garde uniquement les matchings où l'angle moyen est inférieur à 10°)
+SEUIL_KPI = 10.0  
+
+# Matching entre chaque image et ses 3 voisins supérieurs
+for i in range(len(IMG)):
+    for j in range(i + 1, min(i + 4, len(IMG))):  # Maximum 3 voisins supérieurs
+        print(f"Matching entre {IMG_NAMES[i]} et {IMG_NAMES[j]}...")
+
         kpt1, kpt2, matches = geo.init_matching_orb(IMG[i], IMG[j])
         matches = geo.filtre_distance(matches)
-        lines = cv.drawMatches(IMG[i], kpt1, IMG[j], kpt2, matches, None)
 
-        # RANSAC
+        # Vérifier qu'on a au moins 4 correspondances valides
+        if len(matches) < 4:
+            print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (pas assez de correspondances : {len(matches)})")
+            continue  # Ignore cette paire d'images
+
+        # Vérifier la présence de 5 lignes parallèles
+        if not check_parallel_matches(kpt1, kpt2, matches):
+            print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (pas assez de lignes parallèles)")
+            continue  # Ignore cette paire d'images
+
+        # RANSAC pour l'homographie
         H, mask = geo.ransac(kpt1, kpt2, matches)
         mask = mask.ravel().tolist()
         filtered_lines = cv.drawMatches(IMG[i], kpt1, IMG[j], kpt2, matches, None, matchColor=(0,255,0), matchesMask=mask, flags=2)
-        angles[i][j]=geo.extract_rotation_angle(H)
-        angles[j][i]=geo.extract_rotation_angle(H)
 
+        # Calcul de l'angle de rotation
+        angles[i][j] = geo.extract_rotation_angle(H)
+        angles[j][i] = geo.extract_rotation_angle(H)
 
-        #VISU
-        cv.imwrite(f'Matches entre {IMG_NAMES[i]} et {IMG_NAMES[j]}.jpg', filtered_lines)
+        # Vérification du KPI (écart angulaire)
+        if abs(angles[i][j]) > SEUIL_KPI:
+            print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (écart angulaire {angles[i][j]:.2f}° > seuil {SEUIL_KPI}°)")
+            continue  # Ignore cette paire si l'angle dépasse le seuil
 
-        cv.waitKey(0)
-        cv.destroyAllWindows()
+        # Sauvegarde des images de matching valides
+        cv.imwrite(f'Matches_{IMG_NAMES[i]}_et_{IMG_NAMES[j]}.jpg', filtered_lines)
+        print(f"✅ Matching validé pour {IMG_NAMES[i]} et {IMG_NAMES[j]}.")
 
+# Affichage de la matrice des angles
 geo.matrice_angle(angles)
 
+print("✅ Traitement terminé.")

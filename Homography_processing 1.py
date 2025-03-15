@@ -1,36 +1,30 @@
 import numpy as np
 import cv2
 import matching as match
+import os
 
-img02 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2071.tif")
-img01 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2176.tif")
-img0 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2177.tif")
-img1 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2178.tif")
-img2 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2330.tif") 
-img3 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2442.tif") 
-img4 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2443.tif")
-img5 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2444.tif")
-img6 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_2590.tif")
-img65 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4374.tif")
-img7 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4375.tif")
-img8 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4376.tif")
-img9 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4377.tif")
-img10 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4378.tif")
-img11 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4379.tif")
-img12= cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4516.tif")
-img13= cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4515.tif")
-img14= cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2007/2007_P08000262_4643.tif")
+# Définition du chemin des images
+image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos"
 
-IMG = [img02,img01,img0,img1,img2,img3,img4,img6,img65,img7,img8,img9,img10,img11,img12,img13,img14]
+# Liste des images à charger
 
-"""img1 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_1729.tiff")
-img2 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_1837.tiff") 
-img3 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_1885.tiff") 
-img4 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_2004.tiff")
-img5 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_2047.tiff")
-img6 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_2169.tiff")
-img7 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_2208.tiff")
-img8 = cv2.imread("C:/Users/exill/Documents/Erdre/Git Clone 2/Erdre/2013/2013_P14000772_2325.tiff")"""
+image_filenames = [
+    "2007_P08000262_2071.tif", "2007_P08000262_2176.tif", "2007_P08000262_2177.tif",
+    "2007_P08000262_2178.tif", "2007_P08000262_2330.tif", "2007_P08000262_2442.tif",
+    "2007_P08000262_2443.tif", "2007_P08000262_2444.tif", "2007_P08000262_2590.tif",
+    "2007_P08000262_4374.tif", "2007_P08000262_4375.tif", "2007_P08000262_4376.tif",
+    "2007_P08000262_4377.tif", "2007_P08000262_4378.tif", "2007_P08000262_4379.tif",
+    "2007_P08000262_4516.tif", "2007_P08000262_4515.tif", "2007_P08000262_4643.tif"
+]
+'''
+image_filenames = [
+    "2013_P14000772_1729.tif", "2013_P14000772_1885.tif", "2013_P14000772_1837.tif",
+    "2013_P14000772_2004.tif", "2013_P14000772_2047.tif", "2013_P14000772_2169.tif",
+    "2013_P14000772_2208.tif", "2013_P14000772_2325.tif"
+]'''
+
+# Chargement des images
+IMG = [cv2.imread(os.path.join(image_folder, filename)) for filename in image_filenames]
 
 # Taille d'image pour visualisation du procédé
 for i in range(len(IMG)) :
