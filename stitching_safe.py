@@ -5,8 +5,8 @@ import os
 import re
 
 # Chargement des images
-image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos\\2007"
-image_filenames = [f for f in os.listdir(image_folder) if f.endswith(('.png', '.tif'))]
+image_folder = r"C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\to_match\\2007"
+image_filenames = [f for f in os.listdir(image_folder) if f.endswith(('.jpg', '.tif'))]
 
 def extract_number(filename):
     match = re.search(r'\d+', filename)
@@ -33,6 +33,7 @@ for name in IMG_NAMES:
     height = int(img.shape[0] * scale_percent / 100)
     image_dict[name] = cv.resize(img, (width, height), interpolation=cv.INTER_AREA)
 
+# Fonction pour grouper les angles parallèles
 def find_parallel_groups(angles, tolerance=1):
     angle_groups = {}
     
@@ -49,6 +50,7 @@ def find_parallel_groups(angles, tolerance=1):
     best_group = max(angle_groups.values(), key=len, default=[])
     return best_group
 
+# Fonction pour filtrer les matches en fonction des angles
 def filter_parallel_matches(kpt1, kpt2, matches, tolerance=0.1):
     angles = []
 
@@ -70,16 +72,20 @@ def filter_parallel_matches(kpt1, kpt2, matches, tolerance=0.1):
 # Matching et stitching généralisé
 stitched_image = None
 stitched_name = None
-stitching_index = 0  # Variable pour incrémenter les fichiers stitched
+stitching_index = 0
+batch_size = 10  # Nombre d'images traitées à chaque boucle
 
-while True:
-    found_match = False
+while len(image_dict) > 1:
     keys_list = list(image_dict.keys())  # Liste dynamique
 
-    for i in range(len(keys_list)):
-        for j in range(i + 1, len(keys_list)):
-            img1_name = keys_list[i]
-            img2_name = keys_list[j]
+    # Prendre les 10 premières images
+    working_images = keys_list[:batch_size]
+    found_match = False
+
+    for i in range(len(working_images)):
+        for j in range(i + 1, len(working_images)):
+            img1_name = working_images[i]
+            img2_name = working_images[j]
 
             print(f"🔍 Tentative de matching entre {img1_name} et {img2_name}...")
 
@@ -100,7 +106,7 @@ while True:
             H, mask = geo.ransac(kpt1, kpt2, matches)
             if H is None:
                 print(f"⚠️ Homographie impossible entre {img1_name} et {img2_name}")
-                continue # Recommence avec les images restantes
+                continue 
 
             mask = mask.ravel().tolist()
 
@@ -158,7 +164,8 @@ while True:
             del image_dict[img1_name]
             del image_dict[img2_name]
 
-            image_dict = {stitched_name: stitched_cropped, **image_dict}
+            # Ajouter l'image stitchée à la fin de la liste
+            image_dict[stitched_name] = stitched_cropped
 
             cv.imwrite(stitched_name, stitched_cropped)
             print(f"📸 Nouvelle image stitched sauvegardée : {stitched_name}")
@@ -174,8 +181,6 @@ while True:
         break
 
 if stitched_image is not None:
-    cv.imshow("Final Stitched Image", stitched_image)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
-    cv.imwrite(stitched_name, stitched_image)
-    print(f"✅ Image finale sauvegardée sous {stitched_name}")
+    final_name = "2007_stitching.jpg"
+    cv.imwrite(final_name, stitched_image)
+    print(f"✅ Image finale sauvegardée sous {final_name}")

@@ -4,6 +4,7 @@ import pandas as pd
 from PIL import Image
 import io
 
+
 def telechargerPhoto(photoID, mission, dossier, numero, orientation):
     """Télécharge une photo, ajuste son orientation et l'enregistre avec le numéro comme nom de fichier."""
     photoFile = f"{photoID}.tif"
@@ -11,10 +12,11 @@ def telechargerPhoto(photoID, mission, dossier, numero, orientation):
 
     # Construire l'URL
     url = f"https://data.geopf.fr/telechargement/download/pva/{mission}/{photoFile}"
+    print(url)
 
     try:
         # Télécharger l'image
-        reponse = requests.get(url, timeout=10)
+        reponse = requests.get(url, timeout=30)
         if reponse.status_code == 200:
             os.makedirs(dossier, exist_ok=True)
 
@@ -35,7 +37,7 @@ def telechargerPhoto(photoID, mission, dossier, numero, orientation):
 
 # Chemin du fichier Excel
 fichierExcel = r"C:\Users\gindr\Documents\2024-2025\ESILV\Cours\S8\PI2\PI2\database.xlsx"
-annee = '2007'
+annee = '1980'
 dossier = os.path.join(r"C:\Users\gindr\Documents\2024-2025\ESILV\Cours\S8\PI2\PI2", annee)
 
 try:
@@ -46,11 +48,15 @@ try:
                          engine='openpyxl')
 
     photos = data.to_numpy()
+    print(photos)
+    print("Colonnes trouvées :", data.columns.tolist())
+
 
     # Téléchargement et rotation des images
     for cliche in photos:
         numero = cliche[2]  # Le fichier aura uniquement le "Numéro" comme nom
         orientation = float(cliche[3])  # Convertir en float si besoin
+
         telechargerPhoto(cliche[1], cliche[0], dossier, numero, orientation)
 
     print("Fin du script.")
