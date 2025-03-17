@@ -4,12 +4,6 @@ import matching as geo
 import os
 import re
 
-"""
-Ce script effectue un matching entre les images proches géographiquement dans la base de données, et vérifie que le matching est cohérent
-en utilisant des KPIs tels que la moyenne angulaire ou le parallélisme du matching.
-Il n'affiche QUE les lignes de matching correspondant aux droites parallèles.
-"""
-
 image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos\\2007"
 image_filenames = [f for f in os.listdir(image_folder) if f.endswith(('.png', '.tif'))]
 
@@ -38,7 +32,6 @@ for i in range(len(IMG)):
     IMG[i] = cv.resize(IMG[i], (width, height), interpolation=cv.INTER_AREA)
 
 def find_parallel_groups(angles, tolerance=1):
-    """ Trouve les groupes de lignes ayant des angles similaires """
     angle_groups = {}
     
     for angle in angles:
@@ -51,7 +44,6 @@ def find_parallel_groups(angles, tolerance=1):
         if not found_group:
             angle_groups[angle] = [angle]
 
-    # Trouver le groupe avec le plus de lignes parallèles
     best_group = max(angle_groups.values(), key=len, default=[])
     return best_group
 
@@ -68,14 +60,15 @@ def filter_parallel_matches(kpt1, kpt2, matches, tolerance=1):
     best_group = find_parallel_groups([a[0] for a in angles], tolerance)
     
     if len(best_group) < 5:
-        return []  # Si moins de 5 lignes, on n'affiche rien
+        return []
 
-    # Filtrer les correspondances qui appartiennent au groupe parallèle dominant
     filtered_matches = [match for angle, match in angles if angle in best_group]
+
     return filtered_matches
 
 angles = np.zeros((len(IMG), len(IMG)))
 SEUIL_KPI = 30.0  
+matching_dict = {}
 
 for i in range(len(IMG)):
     for j in range(i + 1, min(i + 4, len(IMG))):
@@ -88,14 +81,17 @@ for i in range(len(IMG)):
             print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (pas assez de correspondances : {len(matches)})")
             continue
 
-        # Filtrer pour ne garder que les matches correspondant aux lignes parallèles
         matches = filter_parallel_matches(kpt1, kpt2, matches)
+        
 
         if len(matches) < 5:
             print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (pas assez de lignes parallèles)")
             continue
 
         H, mask = geo.ransac(kpt1, kpt2, matches)
+        if H is None:
+            continue
+
         mask = mask.ravel().tolist()
         filtered_lines = cv.drawMatches(
             IMG[i], kpt1, IMG[j], kpt2, matches, None,
@@ -112,8 +108,22 @@ for i in range(len(IMG)):
             print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[j]} (écart angulaire {angles[i][j]:.2f}° > seuil {SEUIL_KPI}°)")
             continue
 
+        # Sélection d'un point correspondant au hasard
+        best_match = matches[0]
+        point1 = kpt1[best_match.queryIdx].pt  # Coordonnées dans la première image
+        point2 = kpt2[best_match.trainIdx].pt  # Coordonnées dans la seconde image
+
+        # Ajout au dictionnaire des matchings
+        if IMG_NAMES[i] not in matching_dict:
+            matching_dict[IMG_NAMES[i]] = []
+        matching_dict[IMG_NAMES[i]].append({
+            "image_paire": IMG_NAMES[j],
+            "point1": point1,
+            "point2": point2
+        })
+
         cv.imwrite(f'Matches_{IMG_NAMES[i]}_et_{IMG_NAMES[j]}.jpg', filtered_lines)
         print(f"✅ Matching validé pour {IMG_NAMES[i]} et {IMG_NAMES[j]}.")
 
 geo.matrice_angle(angles)
-print("✅ Traitement terminé.")
+print("✅ Traitement terminé POUR LE MATCHING.")

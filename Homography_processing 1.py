@@ -1,87 +1,77 @@
+import cv2 as cv
 import numpy as np
-import cv2
-import matching as match
+import matching as geo
 import os
+import re
 
-# Définition du chemin des images
-image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos"
+# Dossier contenant les images
+image_folder = "C:\\Users\\gindr\\Documents\\2024-2025\\ESILV\\Cours\\S8\\PI2\\PI2\\photos\\2007"
+image_filenames = [f for f in os.listdir(image_folder) if f.endswith(('.png', '.tif'))]
 
-# Liste des images à charger
+def extract_number(filename):
+    match = re.search(r'\d+', filename)
+    return int(match.group()) if match else float('inf')
 
-image_filenames = [
-    "2007_P08000262_2071.tif", "2007_P08000262_2176.tif", "2007_P08000262_2177.tif",
-    "2007_P08000262_2178.tif", "2007_P08000262_2330.tif", "2007_P08000262_2442.tif",
-    "2007_P08000262_2443.tif", "2007_P08000262_2444.tif", "2007_P08000262_2590.tif",
-    "2007_P08000262_4374.tif", "2007_P08000262_4375.tif", "2007_P08000262_4376.tif",
-    "2007_P08000262_4377.tif", "2007_P08000262_4378.tif", "2007_P08000262_4379.tif",
-    "2007_P08000262_4516.tif", "2007_P08000262_4515.tif", "2007_P08000262_4643.tif"
-]
-'''
-image_filenames = [
-    "2013_P14000772_1729.tif", "2013_P14000772_1885.tif", "2013_P14000772_1837.tif",
-    "2013_P14000772_2004.tif", "2013_P14000772_2047.tif", "2013_P14000772_2169.tif",
-    "2013_P14000772_2208.tif", "2013_P14000772_2325.tif"
-]'''
+image_filenames.sort(key=extract_number)
+image_dict = {filename: cv.imread(os.path.join(image_folder, filename)) for filename in image_filenames}
+IMG = list(image_dict.values())
+IMG_NAMES = list(image_dict.keys())
 
-# Chargement des images
-IMG = [cv2.imread(os.path.join(image_folder, filename)) for filename in image_filenames]
+for name, img in image_dict.items():
+    if img is None:
+        print(f"Erreur : L'image {name} n'a pas pu être chargée.")
 
-# Taille d'image pour visualisation du procédé
-for i in range(len(IMG)) :
-    scale_percent = 5  # 5%, peut être adapté
+if not IMG:
+    print("Aucune image trouvée dans le dossier spécifié.")
+    exit()
+
+scale_percent = 10
+for i in range(len(IMG)):
     width = int(IMG[i].shape[1] * scale_percent / 100)
     height = int(IMG[i].shape[0] * scale_percent / 100)
-    dim = (width, height)
-    IMG[i] = cv2.resize(IMG[i], dim, interpolation=cv2.INTER_AREA)
+    IMG[i] = cv.resize(IMG[i], (width, height), interpolation=cv.INTER_AREA)
 
-    
-#Storing image sizes
-h,w = [], []
-for i in range(len(IMG)):
-    h.append(IMG[i].shape[0])
-    w.append(IMG[i].shape[1])
+SEUIL_KPI = 30.0  
+base_image = IMG[0]  # Première image comme référence
 
-# Create a canvas big enough to fit both images
-canvas = np.zeros((h[0]+200, w[0]+200, 3) , dtype=np.uint8)
+# Dimensions maximales estimées (on agrandit pour être sûr)
+max_height, max_width = base_image.shape[:2]
+canvas = np.zeros((max_height * 3, max_width * 3, 3), dtype=np.uint8)
 
-# Place the first image at (0,0)
-canvas[200:h[0]+200, 200:w[0]+200] = IMG[0]
-x_offset=200
-y_offset=200
+# Placer la première image au centre du canevas
+h, w = base_image.shape[:2]
+center_x, center_y = max_width, max_height
+canvas[center_y:center_y + h, center_x:center_x + w] = base_image
 
+# Définir la transformation initiale
+base_transform = np.array([[1, 0, center_x], [0, 1, center_y], [0, 0, 1]])
 
-#Matching
-for i in range(len(IMG)-1):
-    print(i+1)
-    kpt1, kpt2, matches = match.init_matching_orb(IMG[i], IMG[i+1])
-    matches = match.filtre_distance(matches)
+for i in range(len(IMG) - 1):
+    print(f"Stitching entre {IMG_NAMES[i]} et {IMG_NAMES[i+1]}...")
 
-    # RANSAC
-    H, mask = match.ransac(kpt1, kpt2, matches)
-    mask = mask.ravel().tolist()
-    filtered_lines = cv2.drawMatches(IMG[i], kpt1, IMG[i+1], kpt2, matches, None, matchColor=(0,255,0), matchesMask=mask, flags=2)
-        
-    #cv2.imwrite(f'Homography {i} and {i+1}.jpg', filtered_lines)
+    kpt1, kpt2, matches = geo.init_matching_orb(IMG[i], IMG[i+1])
+    matches = geo.filtre_distance(matches)
 
-    # Extract translation from homography
-    tx, ty = -H[0, 2], -H[1, 2]
-    print(f"Translation: ({tx}, {ty})")
+    if len(matches) < 4:
+        print(f"❌ Skipping {IMG_NAMES[i]} - {IMG_NAMES[i+1]} (pas assez de correspondances : {len(matches)})")
+        continue
 
-    #cv2.imwrite("Canvas.jpg", canvas)
-    #Increasing the canvas to fit the new image
-    new_canvas = np.zeros((canvas.shape[0]+ abs(int(ty)), canvas.shape[1] + abs(int(tx)), 3), dtype=np.uint8)
-    new_canvas[:canvas.shape[0], :canvas.shape[1]] = canvas
-    canvas = new_canvas
-    #cv2.imwrite("New Canvas.jpg", canvas)
+    H, mask = geo.ransac(kpt1, kpt2, matches)
+    if H is None:
+        print(f"❌ Homographie non trouvée entre {IMG_NAMES[i]} et {IMG_NAMES[i+1]}")
+        continue
 
-    # Place the second image at its computed offset
-    x_offset += int(tx)
-    y_offset += int(ty)
-    print(f"offset x = {x_offset} and offset y = {y_offset}")
-    canvas[ y_offset:y_offset + h[i+1] ,x_offset:x_offset + w[i+1]] = IMG[i+1]
+    # Appliquer la transformation à l'image suivante
+    full_transform = np.dot(base_transform, H)
+    height2, width2 = IMG[i+1].shape[:2]
+    transformed_img = cv.warpPerspective(IMG[i+1], full_transform, (canvas.shape[1], canvas.shape[0]))
 
-# Show result
-cv2.imwrite("Aligned Placement.jpg", canvas)
+    # Fusionner avec le canevas existant
+    mask = (transformed_img > 0).astype(np.uint8)  # Masque des pixels valides
+    canvas = cv.addWeighted(canvas, 1, transformed_img, 1, 0) * mask + canvas * (1 - mask)
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    # Mise à jour de la transformation de base pour la prochaine image
+    base_transform = full_transform.copy()
+
+cv.imwrite("stitched_output.jpg", canvas)
+print("✅ Stitching terminé. Image sauvegardée sous 'stitched_output.jpg'.")
